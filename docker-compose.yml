@@ -1,0 +1,215 @@
+version: "3.9"
+
+# ══════════════════════════════════════════════════════
+#  MediConnect — Local Development Docker Compose
+#  Starts: backend, frontend, ai_service, websocket,
+#          postgres, mongodb, redis
+# ══════════════════════════════════════════════════════
+
+services:
+
+  # ── PostgreSQL ───────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: mediconnect_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mediconnect
+      POSTGRES_USER: mediconnect_user
+      POSTGRES_PASSWORD: mediconnect_dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mediconnect_user -d mediconnect"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── MongoDB ──────────────────────────────────────────
+  mongodb:
+    image: mongo:7.0
+    container_name: mediconnect_mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: mediconnect_user
+      MONGO_INITDB_ROOT_PASSWORD: mediconnect_dev_password
+      MONGO_INITDB_DATABASE: mediconnect
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis ────────────────────────────────────────────
+  redis:
+    image: redis:7.2-alpine
+    container_name: mediconnect_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Backend (Django REST Framework) ──────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: mediconnect_backend
+    restart: unless-stopped
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py runserver 0.0.0.0:8000"
+    environment:
+      DJANGO_SETTINGS_MODULE: mediconnect.settings.development
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      DATABASE_NAME: mediconnect
+      DATABASE_USER: mediconnect_user
+      DATABASE_PASSWORD: mediconnect_dev_password
+      MONGODB_URI: mongodb://mediconnect_user:mediconnect_dev_password@mongodb:27017/mediconnect?authSource=admin
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      SECRET_KEY: dev-secret-key-change-in-production
+      DEBUG: "True"
+      ALLOWED_HOSTS: "localhost,127.0.0.1,backend"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ── Celery Worker ─────────────────────────────────────
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: mediconnect_celery
+    restart: unless-stopped
+    command: celery -A mediconnect worker --loglevel=info
+    environment:
+      DJANGO_SETTINGS_MODULE: mediconnect.settings.development
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      DATABASE_NAME: mediconnect
+      DATABASE_USER: mediconnect_user
+      DATABASE_PASSWORD: mediconnect_dev_password
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      SECRET_KEY: dev-secret-key-change-in-production
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - backend
+      - redis
+
+  # ── Celery Beat Scheduler ─────────────────────────────
+  celery_beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: mediconnect_celery_beat
+    restart: unless-stopped
+    command: celery -A mediconnect beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    environment:
+      DJANGO_SETTINGS_MODULE: mediconnect.settings.development
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      DATABASE_NAME: mediconnect
+      DATABASE_USER: mediconnect_user
+      DATABASE_PASSWORD: mediconnect_dev_password
+      CELERY_BROKER_URL: redis://redis:6379/1
+      SECRET_KEY: dev-secret-key-change-in-production
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - backend
+      - redis
+
+  # ── AI Service (FastAPI) ──────────────────────────────
+  ai_service:
+    build:
+      context: ./ai_service
+      dockerfile: Dockerfile
+    container_name: mediconnect_ai
+    restart: unless-stopped
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-your-openai-key-here}
+      MONGODB_URI: mongodb://mediconnect_user:mediconnect_dev_password@mongodb:27017/mediconnect?authSource=admin
+      REDIS_URL: redis://redis:6379/2
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./ai_service:/app
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ── WebSocket Service (Socket.io) ─────────────────────
+  websocket:
+    build:
+      context: ./websocket_service
+      dockerfile: Dockerfile
+    container_name: mediconnect_websocket
+    restart: unless-stopped
+    environment:
+      PORT: 3001
+      JWT_SECRET: dev-secret-key-change-in-production
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      DATABASE_NAME: mediconnect
+      DATABASE_USER: mediconnect_user
+      DATABASE_PASSWORD: mediconnect_dev_password
+      REDIS_URL: redis://redis:6379/3
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./websocket_service:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ── Frontend (React + Vite dev server) ───────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development
+    container_name: mediconnect_frontend
+    restart: unless-stopped
+    environment:
+      VITE_API_URL: http://localhost:8000/api/v1
+      VITE_WS_URL: http://localhost:3001
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  mongodb_data:
+  redis_data:
