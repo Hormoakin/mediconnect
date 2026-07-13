@@ -1,0 +1,108 @@
+# ══════════════════════════════════════════════════════════════
+# .github/workflows/build-and-push.yaml
+# Workflow 1: Build backend Docker image and push to DockerHub.
+# Triggers on every push to main that touches backend code.
+# ══════════════════════════════════════════════════════════════
+name: Build and Push Backend Image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'ai_service/**'
+      - 'websocket_service/**'
+      - '.github/workflows/build-and-push.yaml'
+
+jobs:
+  test:
+    name: Run Unit Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: mediconnect_test
+          POSTGRES_USER: mediconnect_user
+          POSTGRES_PASSWORD: test_password
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+      redis:
+        image: redis:7.2-alpine
+        ports:
+          - 6379:6379
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - name: Install dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+      - name: Run unit tests with coverage
+        env:
+          DJANGO_SETTINGS_MODULE: mediconnect.settings.testing
+          DATABASE_HOST: localhost
+          DATABASE_PORT: 5432
+          DATABASE_NAME: mediconnect_test
+          DATABASE_USER: mediconnect_user
+          DATABASE_PASSWORD: test_password
+          REDIS_URL: redis://localhost:6379/0
+          CELERY_BROKER_URL: redis://localhost:6379/1
+          SECRET_KEY: test-secret-key-for-ci-only
+        run: |
+          cd backend
+          pytest --cov=apps --cov-report=xml --cov-fail-under=70 -v
+      - name: Run security scan (Bandit)
+        run: |
+          cd backend
+          bandit -r apps/ -ll --exit-zero
+
+  build-backend:
+    name: Build & Push Backend
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Build and push backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/mediconnect-backend:${{ github.sha }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/mediconnect-backend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  build-websocket:
+    name: Build & Push WebSocket Service
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - uses: docker/build-push-action@v5
+        with:
+          context: ./websocket_service
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/mediconnect-websocket:${{ github.sha }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/mediconnect-websocket:latest
+---

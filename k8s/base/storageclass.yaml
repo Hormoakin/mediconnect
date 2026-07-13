@@ -1,0 +1,20 @@
+# ══════════════════════════════════════════════════════════════
+# k8s/base/storageclass.yaml
+# Encrypted EBS gp3 volumes for PostgreSQL StatefulSet.
+# Retain policy ensures data survives pod deletion.
+# ══════════════════════════════════════════════════════════════
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: gp3-encrypted
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: ebs.csi.aws.com
+parameters:
+  type: gp3
+  encrypted: "true"
+  fsType: ext4
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Retain
+allowVolumeExpansion: true
+---

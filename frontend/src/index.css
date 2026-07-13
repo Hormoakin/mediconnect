@@ -1,0 +1,66 @@
+ ═══════════════════════════════════════════════════════════════
+   frontend/src/index.css
+ ═══════════════════════════════════════════════════════════════
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html { scroll-behavior: smooth; }
+
+  ::selection {
+    background-color: #E4F3EF;
+    color: #0A4F41;
+  }
+
+  :focus-visible {
+    outline: 2px solid #0F6F5C;
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-brand-teal px-5 py-2.5
+           font-body font-semibold text-white shadow-card transition-all duration-150
+           hover:bg-brand-teal-deep hover:shadow-card-hover active:scale-[0.98]
+           disabled:opacity-50 disabled:pointer-events-none;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-border-soft
+           bg-surface-raised px-5 py-2.5 font-body font-semibold text-ink shadow-card
+           transition-all duration-150 hover:border-brand-teal hover:text-brand-teal
+           active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none;
+  }
+
+  .btn-accent {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-brand-amber px-5 py-2.5
+           font-body font-semibold text-brand-ink shadow-card transition-all duration-150
+           hover:brightness-95 hover:shadow-card-hover active:scale-[0.98];
+  }
+
+  .card {
+    @apply rounded-xl2 border border-border-soft bg-surface-raised p-6 shadow-card;
+  }
+
+  .input-field {
+    @apply w-full rounded-lg border border-border-soft bg-surface-raised px-4 py-2.5
+           font-body text-ink placeholder:text-ink-faint
+           focus:border-brand-teal focus:outline-none focus:ring-2 focus:ring-brand-teal-tint
+           disabled:bg-surface disabled:text-ink-faint;
+  }
+
+  .label-text {
+    @apply mb-1.5 block font-body text-sm font-medium text-ink-soft;
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-1 font-mono text-xs font-medium;
+  }
+  .badge-pending   { @apply bg-brand-amber-tint text-amber-800; }
+  .badge-confirmed { @apply bg-brand-teal-tint text-brand-teal-deep; }
+  .badge-completed { @apply bg-emerald-100 text-emerald-700; }
+  .badge-cancelled { @apply bg-brand-coral-tint text-red-700; }
+}

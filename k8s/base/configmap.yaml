@@ -1,0 +1,24 @@
+# ══════════════════════════════════════════════════════════════
+# k8s/base/configmap.yaml
+# Non-sensitive environment configuration.
+# Secrets (DB passwords, API keys) are in Sealed Secrets.
+# ══════════════════════════════════════════════════════════════
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mediconnect-config
+  namespace: mediconnect
+data:
+  DJANGO_SETTINGS_MODULE: "mediconnect.settings.production"
+  DATABASE_HOST: "postgres-service"
+  DATABASE_PORT: "5432"
+  DATABASE_NAME: "mediconnect"
+  DATABASE_USER: "mediconnect_user"
+  REDIS_URL: "redis://redis-service:6379/0"
+  CELERY_BROKER_URL: "redis://redis-service:6379/1"
+  ALLOWED_HOSTS: "mediconnect.salman-aak.com,api.mediconnect.salman-aak.com"
+  CORS_ALLOWED_ORIGINS: "https://mediconnect.salman-aak.com"
+  AWS_S3_REGION_NAME: "eu-north-1"
+  AWS_STORAGE_BUCKET_NAME: "mediconnect-assets-aak"
+  OPENAI_MODEL: "gpt-4"
+---
