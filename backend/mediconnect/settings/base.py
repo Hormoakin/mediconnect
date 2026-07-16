@@ -213,7 +213,7 @@ TWILIO_PHONE_NUMBER = env('TWILIO_PHONE_NUMBER', default='')
 
 # ── SendGrid ──────────────────────────────────────────────────
 SENDGRID_API_KEY    = env('SENDGRID_API_KEY', default='')
-DEFAULT_FROM_EMAIL  = 'noreply@mediconnect.salman-aak.com'
+DEFAULT_FROM_EMAIL  = 'ahmed@salman-aak.com'
 DEFAULT_FROM_NAME   = 'MediConnect'
 
 # Email backend (overridden per environment)

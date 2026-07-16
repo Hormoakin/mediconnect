@@ -1,0 +1,97 @@
+# ══════════════════════════════════════════════════════════════
+# k8s/monitoring/alertmanager.yaml
+# Routes alerts from Prometheus to email (via SendGrid SMTP).
+# NFR-14: alert notification response < 5 minutes.
+# ══════════════════════════════════════════════════════════════
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+  namespace: monitoring
+data:
+  alertmanager.yml: |
+    global:
+      smtp_smarthost: 'smtp.sendgrid.net:587'
+      smtp_from: 'alerts@mediconnect.salman-aak.com'
+      smtp_auth_username: 'apikey'
+      smtp_auth_password: '${SENDGRID_API_KEY}'
+      smtp_require_tls: true
+      resolve_timeout: 5m
+
+    route:
+      group_by: ['alertname', 'cluster']
+      group_wait:      30s
+      group_interval:  5m
+      repeat_interval: 4h
+      receiver: email-alerts
+      routes:
+        - match:
+            severity: critical
+          receiver: email-alerts
+          group_wait: 10s
+          repeat_interval: 1h
+
+    receivers:
+      - name: email-alerts
+        email_configs:
+          - to: 'ahmed@salman-aak.com'
+            send_resolved: true
+            headers:
+              subject: '[MediConnect {{ .Status | toUpper }}] {{ .GroupLabels.alertname }}'
+
+    inhibit_rules:
+      - source_match:
+          severity: critical
+        target_match:
+          severity: warning
+        equal: [alertname, cluster]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertmanager
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alertmanager
+  template:
+    metadata:
+      labels:
+        app: alertmanager
+    spec:
+      containers:
+        - name: alertmanager
+          image: prom/alertmanager:v0.27.0
+          args:
+            - "--config.file=/etc/alertmanager/alertmanager.yml"
+            - "--storage.path=/alertmanager"
+          ports:
+            - containerPort: 9093
+          volumeMounts:
+            - name: config
+              mountPath: /etc/alertmanager
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "100m"
+      volumes:
+        - name: config
+          configMap:
+            name: alertmanager-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alertmanager-service
+  namespace: monitoring
+spec:
+  selector:
+    app: alertmanager
+  ports:
+    - port: 9093
+      targetPort: 9093

@@ -1,0 +1,19 @@
+# ══════════════════════════════════════════════════════════════
+# ansible/site.yml
+# Main playbook — runs all roles against all cluster nodes.
+# Run from a machine with SSH access to the nodes (via bastion):
+#
+#   ansible-playbook -i inventory/hosts site.yml \
+#     --private-key ~/.ssh/mediconnect_nodes \
+#     --become
+# ══════════════════════════════════════════════════════════════
+---
+- name: MediConnect Node Hardening
+  hosts: all
+  become: true
+  gather_facts: true
+  roles:
+    - common
+    - security
+    - monitoring
+---

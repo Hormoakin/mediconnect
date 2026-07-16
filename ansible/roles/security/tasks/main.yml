@@ -1,0 +1,217 @@
+# ══════════════════════════════════════════════════════════════
+# ansible/roles/security/tasks/main.yml
+# ══════════════════════════════════════════════════════════════
+---
+# ── Install security packages ─────────────────────────────────
+- name: Install security tools
+  apt:
+    name:
+      - ufw           # Uncomplicated Firewall
+      - fail2ban      # Brute-force protection
+      - auditd        # System call audit daemon
+      - rkhunter      # Rootkit detection
+    state: present
+
+# ── SSH Hardening ─────────────────────────────────────────────
+# Prevents root login and limits authentication attempts.
+# NFR-06: all access must be encrypted (key-based SSH only).
+- name: Harden SSH configuration
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+    state: present
+    backup: yes
+  loop:
+    - { regexp: '^#?PermitRootLogin',    line: 'PermitRootLogin no' }
+    - { regexp: '^#?PasswordAuthentication', line: 'PasswordAuthentication no' }
+    - { regexp: '^#?MaxAuthTries',       line: 'MaxAuthTries 3' }
+    - { regexp: '^#?MaxSessions',        line: 'MaxSessions 5' }
+    - { regexp: '^#?X11Forwarding',      line: 'X11Forwarding no' }
+    - { regexp: '^#?ClientAliveInterval', line: 'ClientAliveInterval 300' }
+    - { regexp: '^#?ClientAliveCountMax', line: 'ClientAliveCountMax 2' }
+    - { regexp: '^#?LoginGraceTime',     line: 'LoginGraceTime 30' }
+    - { regexp: '^#?Protocol',           line: 'Protocol 2' }
+    - { regexp: '^#?PrintLastLog',       line: 'PrintLastLog yes' }
+  notify: Restart SSH
+
+- name: Validate SSH configuration
+  command: sshd -t
+  changed_when: false
+
+# ── UFW Firewall ───────────────────────────────────────────────
+# Default-deny inbound. Only allow:
+#  - SSH (port 22) — for Ansible and emergency node access
+#  - Kubernetes API (port 6443) — for kubectl
+#  - NodePort range (30000-32767) — for K8s service exposure
+#  - HTTPS (443) — for NGINX ingress
+#  - HTTP (80) — for cert-manager ACME challenge
+# All other inbound traffic is blocked.
+- name: Set UFW default policies
+  ufw:
+    state: enabled
+    policy: deny
+    direction: incoming
+
+- name: Allow outbound traffic (default)
+  ufw:
+    policy: allow
+    direction: outgoing
+
+- name: Allow SSH (port 22)
+  ufw:
+    rule: allow
+    port: '22'
+    proto: tcp
+    comment: 'SSH access for administration'
+
+- name: Allow Kubernetes API server
+  ufw:
+    rule: allow
+    port: '6443'
+    proto: tcp
+    comment: 'Kubernetes API server'
+
+- name: Allow Kubernetes NodePort range
+  ufw:
+    rule: allow
+    port: '30000:32767'
+    proto: tcp
+    comment: 'Kubernetes NodePort services'
+
+- name: Allow HTTP (ACME challenge for Let''s Encrypt)
+  ufw:
+    rule: allow
+    port: '80'
+    proto: tcp
+
+- name: Allow HTTPS
+  ufw:
+    rule: allow
+    port: '443'
+    proto: tcp
+
+- name: Allow Prometheus scraping between nodes
+  ufw:
+    rule: allow
+    port: '9090'
+    proto: tcp
+    comment: 'Prometheus metrics scraping'
+
+- name: Allow internal cluster communication (Calico CNI)
+  ufw:
+    rule: allow
+    src: '10.0.0.0/8'
+    comment: 'Internal VPC cluster traffic'
+
+- name: Enable UFW logging
+  ufw:
+    logging: 'on'
+
+# ── fail2ban ──────────────────────────────────────────────────
+# Auto-bans IPs that make too many failed SSH login attempts.
+# Adds an extra layer of defence on top of the SSH MaxAuthTries
+# setting above.
+- name: Configure fail2ban jail for SSH
+  copy:
+    content: |
+      [DEFAULT]
+      bantime  = 3600
+      findtime = 600
+      maxretry = 5
+      backend  = systemd
+
+      [sshd]
+      enabled  = true
+      port     = ssh
+      logpath  = %(sshd_log)s
+      maxretry = 3
+      bantime  = 7200
+    dest: /etc/fail2ban/jail.local
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart fail2ban
+
+- name: Enable and start fail2ban
+  systemd:
+    name: fail2ban
+    enabled: yes
+    state: started
+
+# ── Kernel security parameters ────────────────────────────────
+- name: Apply kernel security hardening via sysctl
+  sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: yes
+  loop:
+    # Prevent IP spoofing
+    - { name: 'net.ipv4.conf.all.rp_filter',        value: '1' }
+    - { name: 'net.ipv4.conf.default.rp_filter',    value: '1' }
+    # Disable ICMP redirects (prevents MITM via ICMP redirect)
+    - { name: 'net.ipv4.conf.all.accept_redirects',    value: '0' }
+    - { name: 'net.ipv4.conf.all.send_redirects',      value: '0' }
+    - { name: 'net.ipv6.conf.all.accept_redirects',    value: '0' }
+    # Ignore broadcast pings (prevents Smurf attacks)
+    - { name: 'net.ipv4.icmp_echo_ignore_broadcasts', value: '1' }
+    # Enable TCP SYN cookies (prevents SYN flood DoS)
+    - { name: 'net.ipv4.tcp_syncookies',              value: '1' }
+    # Disable IPv6 router advertisements
+    - { name: 'net.ipv6.conf.all.accept_ra',          value: '0' }
+    # Log suspicious packets
+    - { name: 'net.ipv4.conf.all.log_martians',       value: '1' }
+
+# ── Disable unused services ────────────────────────────────────
+- name: Disable unnecessary services
+  systemd:
+    name: "{{ item }}"
+    enabled: no
+    state: stopped
+  loop:
+    - avahi-daemon
+    - cups
+    - bluetooth
+  failed_when: false   # OK if these services don't exist on this node
+
+# ── Audit daemon ───────────────────────────────────────────────
+- name: Enable and start auditd
+  systemd:
+    name: auditd
+    enabled: yes
+    state: started
+
+- name: Configure audit rules for sensitive file access
+  copy:
+    content: |
+      # Monitor changes to user accounts
+      -w /etc/passwd  -p wa -k user_modification
+      -w /etc/shadow  -p wa -k user_modification
+      -w /etc/sudoers -p wa -k privilege_escalation
+      # Monitor SSH configuration changes
+      -w /etc/ssh/sshd_config -p wa -k ssh_config
+      # Monitor cron (scheduled tasks)
+      -w /etc/cron.d    -p wa -k cron_modification
+      -w /var/spool/cron -p wa -k cron_modification
+    dest: /etc/audit/rules.d/mediconnect.rules
+    owner: root
+    group: root
+    mode: '0640'
+  notify: Reload auditd rules
+
+handlers:
+  - name: Restart SSH
+    systemd:
+      name: sshd
+      state: restarted
+
+  - name: Restart fail2ban
+    systemd:
+      name: fail2ban
+      state: restarted
+
+  - name: Reload auditd rules
+    command: augenrules --load
+    changed_when: true
+

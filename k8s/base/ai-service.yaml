@@ -1,0 +1,139 @@
+# ══════════════════════════════════════════════════════════════
+# k8s/base/ai-service.yaml
+#
+# AI microservice deployment — isolated from the Django backend
+# so GPT-4 latency (1–3s) does not block the main API worker
+# pool and violate NFR-01 (500ms p95). See Chapter 3, Section
+# 3.4.1 for full architectural justification.
+# ══════════════════════════════════════════════════════════════
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-service
+  namespace: mediconnect
+  labels:
+    app: ai-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-service
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: ai-service
+    spec:
+      initContainers:
+        # Wait for MongoDB to be ready before starting the AI service
+        # (the SymptomChecker constructor tries to connect to MongoDB)
+        - name: wait-for-mongo
+          image: busybox:1.36
+          command: ['sh', '-c', 'until nc -z mongodb-service 27017; do echo waiting for mongo; sleep 3; done']
+      containers:
+        - name: ai-service
+          image: hormoakin001/mediconnect-ai:latest
+          ports:
+            - containerPort: 8001
+          env:
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: mediconnect-api-secrets
+                  key: OPENAI_API_KEY
+            - name: MONGODB_URI
+              valueFrom:
+                secretKeyRef:
+                  name: mediconnect-db-credentials
+                  key: MONGODB_URI
+            - name: REDIS_URL
+              value: "redis://redis-service:6379/2"
+            - name: BACKEND_BASE_URL
+              value: "http://backend-service:8000"
+            - name: OPENAI_MODEL
+              value: "gpt-4"
+            - name: MODEL_PATH
+              value: "/app/models"
+            - name: CORS_ORIGINS
+              value: '["https://mediconnect.salman-aak.com"]'
+          resources:
+            requests:
+              memory: "512Mi"    # sklearn model + numpy in memory
+              cpu: "300m"
+            limits:
+              memory: "1Gi"
+              cpu: "800m"
+          volumeMounts:
+            - name: model-storage
+              mountPath: /app/models
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            initialDelaySeconds: 45    # Allow model training/loading time
+            periodSeconds: 20
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 5
+      volumes:
+        - name: model-storage
+          persistentVolumeClaim:
+            claimName: ai-model-pvc
+---
+# PVC for persisting trained ML model artefacts across pod restarts.
+# Without this, the model is retrained from seed data on every restart
+# (which takes ~10s — acceptable but inefficient).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ai-model-pvc
+  namespace: mediconnect
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: gp3-encrypted
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-service
+  namespace: mediconnect
+  labels:
+    app: ai-service
+spec:
+  selector:
+    app: ai-service
+  ports:
+    - name: http
+      port: 8001
+      targetPort: 8001
+  # ClusterIP only — the AI service is internal.
+  # External access routes through the Django backend:
+  #   POST /api/v1/ai/symptom-check/ → backend → ai-service:8001
+  type: ClusterIP
+---
+# Update the ingress to add direct AI service route (optional —
+# currently the Django backend proxies to the AI service internally.
+# Uncomment only if you want direct external access for testing):
+#
+# - host: api.mediconnect.salman-aak.com
+#   http:
+#     paths:
+#       - path: /api/v1/ai/
+#         pathType: Prefix
+#         backend:
+#           service:
+#             name: ai-service
+#             port:
+#               number: 8001

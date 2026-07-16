@@ -1,0 +1,130 @@
+# ══════════════════════════════════════════════════════════════
+# k8s/monitoring/exporters.yaml
+#
+# postgres_exporter and redis_exporter give Prometheus visibility
+# into the data layer — connection pool saturation, query latency,
+# memory usage — without any code changes to the Django backend.
+# Both are deployed in the mediconnect namespace so they can
+# reach postgres-service and redis-service via ClusterDNS.
+# ══════════════════════════════════════════════════════════════
+
+# ── postgres_exporter ─────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-exporter
+  namespace: mediconnect
+  labels:
+    app: postgres-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres-exporter
+  template:
+    metadata:
+      labels:
+        app: postgres-exporter
+    spec:
+      containers:
+        - name: postgres-exporter
+          image: prometheuscommunity/postgres-exporter:v0.15.0
+          ports:
+            - containerPort: 9187
+          env:
+            - name: DATA_SOURCE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: mediconnect-db-credentials
+                  key: POSTGRES_EXPORTER_DSN
+            # Format of POSTGRES_EXPORTER_DSN in the sealed secret:
+            # postgresql://mediconnect_user:PASSWORD@postgres-service:5432/mediconnect?sslmode=disable
+          args:
+            - "--log.level=warn"
+            - "--collector.stat_statements"
+            - "--collector.stat_bgwriter"
+            - "--collector.stat_user_tables"
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "100m"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 9187
+            initialDelaySeconds: 15
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-exporter-service
+  namespace: mediconnect
+  labels:
+    app: postgres-exporter
+spec:
+  selector:
+    app: postgres-exporter
+  ports:
+    - name: metrics
+      port: 9187
+      targetPort: 9187
+---
+# ── redis_exporter ────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-exporter
+  namespace: mediconnect
+  labels:
+    app: redis-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-exporter
+  template:
+    metadata:
+      labels:
+        app: redis-exporter
+    spec:
+      containers:
+        - name: redis-exporter
+          image: oliver006/redis_exporter:v1.61.0
+          ports:
+            - containerPort: 9121
+          env:
+            - name: REDIS_ADDR
+              value: "redis://redis-service:6379"
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "30m"
+            limits:
+              memory: "64Mi"
+              cpu: "100m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 9121
+            initialDelaySeconds: 10
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-exporter-service
+  namespace: mediconnect
+  labels:
+    app: redis-exporter
+spec:
+  selector:
+    app: redis-exporter
+  ports:
+    - name: metrics
+      port: 9121
+      targetPort: 9121
+---
