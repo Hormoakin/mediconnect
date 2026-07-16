@@ -28,15 +28,78 @@ resource "aws_s3_bucket" "terraform_state" {
   }
 }
 
-############################################################
+resource "aws_s3_bucket_versioning" "terraform_state" {
+  bucket = aws_s3_bucket.terraform_state.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
 
-# SendGrid Domain Authentication
+resource "aws_s3_bucket_server_side_encryption_configuration" "terraform_state" {
+  bucket = aws_s3_bucket.terraform_state.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
 
-############################################################
-# Add these to terraform/environments/production/main.tf
+resource "aws_s3_bucket_public_access_block" "terraform_state" {
+  bucket                  = aws_s3_bucket.terraform_state.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
 
+# ── DynamoDB: Terraform State Lock ───────────────────────────
+resource "aws_dynamodb_table" "terraform_locks" {
+  name         = "mediconnect-terraform-locks"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "LockID"
+  attribute {
+    name = "LockID"
+    type = "S"
+  }
+}
+
+# ── S3: Medical Documents + Static Assets ─────────────────────
+resource "aws_s3_bucket" "mediconnect_assets" {
+  bucket = "mediconnect-assets-aak"
+}
+
+resource "aws_s3_bucket_versioning" "mediconnect_assets" {
+  bucket = aws_s3_bucket.mediconnect_assets.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "mediconnect_assets" {
+  bucket = aws_s3_bucket.mediconnect_assets.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "mediconnect_assets" {
+  bucket                  = aws_s3_bucket.mediconnect_assets.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+# ── Route53: DNS Zone ─────────────────────────────────────────
+locals {
+  route53_zone_id = "Z02876053BLRYYYQ3DNT1"
+}
+
+# ── Route53: CNAME Records ────────────────────────────────
 resource "aws_route53_record" "sendgrid_em" {
-  zone_id = data.aws_route53_zone.main.zone_id
+  zone_id = local.route53_zone_id
   name    = "em2873.mediconnect.salman-aak.com"   # ← paste exact value from SendGrid
   type    = "CNAME"
   ttl     = 300
@@ -44,7 +107,7 @@ resource "aws_route53_record" "sendgrid_em" {
 }
 
 resource "aws_route53_record" "sendgrid_s1" {
-  zone_id = data.aws_route53_zone.main.zone_id
+  zone_id = local.route53_zone_id
   name    = "s1._domainkey.mediconnect.salman-aak.com"
   type    = "CNAME"
   ttl     = 300
@@ -52,7 +115,7 @@ resource "aws_route53_record" "sendgrid_s1" {
 }
 
 resource "aws_route53_record" "sendgrid_s2" {
-  zone_id = data.aws_route53_zone.main.zone_id
+  zone_id = local.route53_zone_id
   name    = "s2._domainkey.mediconnect.salman-aak.com"
   type    = "CNAME"
   ttl     = 300
@@ -60,7 +123,7 @@ resource "aws_route53_record" "sendgrid_s2" {
 }
 
 resource "aws_route53_record" "sendgrid_dmarc" {
-  zone_id = data.aws_route53_zone.main.zone_id
+  zone_id = local.route53_zone_id
   name    = "_dmarc.mediconnect.salman-aak.com"
   type    = "TXT"
   ttl     = 300

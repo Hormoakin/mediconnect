@@ -9,6 +9,23 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import OrderingFilter
 from apps.accounts.permissions import IsDoctor, IsPatient, IsPatientOrDoctor
 
+from apps.accounts.permissions import (
+    IsDoctor,
+    IsPatient,
+    IsPatientOrDoctor,
+)
+
+from .models import (
+    Appointment,
+    DoctorReview,
+)
+
+from .serializers import (
+    AppointmentSerializer,
+    AppointmentCreateSerializer,
+    AppointmentStatusUpdateSerializer,
+    DoctorReviewSerializer,
+)
 
 class AppointmentListCreateView(generics.ListCreateAPIView):
     """
