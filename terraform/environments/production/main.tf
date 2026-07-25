@@ -20,6 +20,11 @@ provider "aws" {
   }
 }
 
+#Existing Nginx Ingress Load Balancer
+data "aws_elb" "ingress" {
+  name = "ac9bd386a7760434a954ae225a4f50e6"
+}
+
 # ── S3: Terraform State Bucket ────────────────────────────────
 resource "aws_s3_bucket" "terraform_state" {
   bucket = "mediconnect-terraform-state-aak"
@@ -100,10 +105,10 @@ locals {
 # ── Route53: CNAME Records ────────────────────────────────
 resource "aws_route53_record" "sendgrid_em" {
   zone_id = local.route53_zone_id
-  name    = "em2873.mediconnect.salman-aak.com"   # ← paste exact value from SendGrid
+  name    = "em2873.mediconnect.salman-aak.com" # ← paste exact value from SendGrid
   type    = "CNAME"
   ttl     = 300
-  records = ["u109957178.wl179.sendgrid.net"]        # ← paste exact value from SendGrid
+  records = ["u109957178.wl179.sendgrid.net"] # ← paste exact value from SendGrid
 }
 
 resource "aws_route53_record" "sendgrid_s1" {
@@ -128,4 +133,43 @@ resource "aws_route53_record" "sendgrid_dmarc" {
   type    = "TXT"
   ttl     = 300
   records = ["v=DMARC1; p=none;"]
+}
+
+# Frontend
+resource "aws_route53_record" "frontend" {
+  zone_id = local.route53_zone_id
+  name    = "mediconnect.salman-aak.com"
+  type    = "A"
+
+  alias {
+    name                   = data.aws_elb.ingress.dns_name
+    zone_id                = data.aws_elb.ingress.zone_id
+    evaluate_target_health = true
+  }
+}
+
+# Backend API
+resource "aws_route53_record" "api" {
+  zone_id = local.route53_zone_id
+  name    = "api.mediconnect.salman-aak.com"
+  type    = "A"
+
+  alias {
+    name                   = data.aws_elb.ingress.dns_name
+    zone_id                = data.aws_elb.ingress.zone_id
+    evaluate_target_health = true
+  }
+}
+
+# WebSocket
+resource "aws_route53_record" "websocket" {
+  zone_id = local.route53_zone_id
+  name    = "ws.mediconnect.salman-aak.com"
+  type    = "A"
+
+  alias {
+    name                   = data.aws_elb.ingress.dns_name
+    zone_id                = data.aws_elb.ingress.zone_id
+    evaluate_target_health = true
+  }
 }

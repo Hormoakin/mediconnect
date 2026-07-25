@@ -1,12 +1,10 @@
-// ══════════════════════════════════════════════════════════════
-// frontend/src/pages/auth/Register.tsx
-// ══════════════════════════════════════════════════════════════
-import { useState, FormEvent } from 'react'
+import { useState, FormEvent, ChangeEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { UserPlus, Stethoscope, User as UserIcon } from 'lucide-react'
+import clsx from 'clsx'
+
 import { useAuth, apiErrorMessage } from '../../contexts/AuthContext'
 import { PulseLogo } from '../../components/layout/DashboardLayout'
-import clsx from 'clsx'
 
 type Role = 'patient' | 'doctor'
 
@@ -15,18 +13,30 @@ export default function Register() {
   const navigate = useNavigate()
 
   const [role, setRole] = useState<Role>('patient')
-  const [form, setForm] = useState({
-    full_name: '', email: '', username: '', phone: '',
-    password: '', confirm_password: '',
-  })
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
 
-  const update = (field: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
-    setForm((f) => ({ ...f, [field]: e.target.value }))
+  const [form, setForm] = useState({
+    full_name: '',
+    username: '',
+    email: '',
+    phone: '',
+    password: '',
+    confirm_password: '',
+  })
+
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const update =
+    (field: keyof typeof form) =>
+    (e: ChangeEvent<HTMLInputElement>) =>
+      setForm((prev) => ({
+        ...prev,
+        [field]: e.target.value,
+      }))
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
+
     setError('')
 
     if (form.password !== form.confirm_password) {
@@ -35,9 +45,19 @@ export default function Register() {
     }
 
     setLoading(true)
+
     try {
-      await register({ ...form, role })
-      navigate('/dashboard')
+      await register({
+        full_name: form.full_name,
+        username: form.username,
+        email: form.email,
+        phone: form.phone,
+        password: form.password,
+        confirm_password: form.confirm_password,
+        role,
+      })
+
+      navigate('/login')
     } catch (err) {
       setError(apiErrorMessage(err))
     } finally {
@@ -47,79 +67,152 @@ export default function Register() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-surface px-5 py-10 font-body">
-      <div className="w-full max-w-sm">
-        <Link to="/" className="mb-8 flex items-center justify-center gap-2">
+      <div className="w-full max-w-lg rounded-2xl bg-white p-8 shadow-xl">
+
+        <Link
+          to="/"
+          className="mb-6 flex items-center justify-center gap-2"
+        >
           <PulseLogo className="h-7 w-7 text-brand-teal" />
-          <span className="font-display text-lg font-semibold text-brand-ink">MediConnect</span>
+          <span className="font-display text-lg font-semibold text-brand-ink">
+            MediConnect
+          </span>
         </Link>
 
-        <div className="card">
-          <h1 className="font-display text-xl font-semibold text-ink">Create your account</h1>
-          <p className="mt-1 font-body text-sm text-ink-soft">Takes about a minute.</p>
+        <h1 className="text-center font-display text-3xl font-bold text-brand-ink">
+          Create Account
+        </h1>
 
-          {/* Role selector — pharmacist/admin accounts are created by an
-              administrator only (see Chapter 3, Section 3.3.2, FR-01.1
-              validation: allowed_self_register_roles) *\/}
-          <div className="mt-4 grid grid-cols-2 gap-2">
-            {(['patient', 'doctor'] as Role[]).map((r) => (
-              <button
-                key={r} type="button" onClick={() => setRole(r)}
-                className={clsx(
-                  'flex flex-col items-center gap-1.5 rounded-lg border px-3 py-3 transition-colors',
-                  role === r ? 'border-brand-teal bg-brand-teal-tint' : 'border-border-soft hover:border-ink-faint'
-                )}
-              >
-                {r === 'patient' ? <UserIcon className="h-4 w-4 text-brand-teal-deep" /> : <Stethoscope className="h-4 w-4 text-brand-teal-deep" />}
-                <span className="font-body text-sm font-medium capitalize text-ink">{r}</span>
-              </button>
-            ))}
-          </div>
+        <p className="mt-2 text-center text-sm text-ink-soft">
+          Takes about a minute.
+        </p>
 
-          {error && (
-            <div className="mt-4 rounded-lg bg-brand-coral-tint px-3.5 py-2.5 font-body text-sm text-red-700">
-              {error}
-            </div>
-          )}
+        {/* Role Selector */}
+        <div className="mt-6 grid grid-cols-2 gap-3">
+          {(['patient', 'doctor'] as Role[]).map((r) => (
+            <button
+              key={r}
+              type="button"
+              onClick={() => setRole(r)}
+              className={clsx(
+                'flex items-center justify-center gap-2 rounded-xl border p-4 transition',
+                role === r
+                  ? 'border-brand-teal bg-brand-teal/10'
+                  : 'border-gray-200 hover:border-brand-teal'
+              )}
+            >
+              {r === 'patient' ? (
+                <UserIcon className="h-5 w-5" />
+              ) : (
+                <Stethoscope className="h-5 w-5" />
+              )}
 
-          <form onSubmit={handleSubmit} className="mt-5 space-y-4">
-            <div>
-              <label className="label-text">Full name</label>
-              <input required className="input-field" value={form.full_name} onChange={update('full_name')} placeholder="Ada Obi" />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="label-text">Username</label>
-                <input required className="input-field" value={form.username} onChange={update('username')} placeholder="adaobi" />
-              </div>
-              <div>
-                <label className="label-text">Phone</label>
-                <input required className="input-field" value={form.phone} onChange={update('phone')} placeholder="+234…" />
-              </div>
-            </div>
-            <div>
-              <label className="label-text">Email address</label>
-              <input required type="email" className="input-field" value={form.email} onChange={update('email')} placeholder="you@example.com" />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="label-text">Password</label>
-                <input required type="password" className="input-field" value={form.password} onChange={update('password')} />
-              </div>
-              <div>
-                <label className="label-text">Confirm</label>
-                <input required type="password" className="input-field" value={form.confirm_password} onChange={update('confirm_password')} />
-              </div>
-            </div>
-
-            <button type="submit" disabled={loading} className="btn-primary w-full">
-              {loading ? 'Creating account…' : (<>Create account <UserPlus className="h-4 w-4" /></>)}
+              <span className="capitalize">{r}</span>
             </button>
-          </form>
+          ))}
         </div>
 
-        <p className="mt-6 text-center font-body text-sm text-ink-soft">
+        {error && (
+          <div className="mt-4 rounded-lg bg-red-100 p-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
+        <form
+          onSubmit={handleSubmit}
+          className="mt-6 space-y-4"
+        >
+          <div>
+            <label className="label-text">Full Name</label>
+            <input
+              required
+              className="input-field"
+              value={form.full_name}
+              onChange={update('full_name')}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label-text">Username</label>
+              <input
+                required
+                className="input-field"
+                value={form.username}
+                onChange={update('username')}
+              />
+            </div>
+
+            <div>
+              <label className="label-text">Phone</label>
+              <input
+                required
+                className="input-field"
+                value={form.phone}
+                onChange={update('phone')}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="label-text">Email Address</label>
+            <input
+              required
+              type="email"
+              className="input-field"
+              value={form.email}
+              onChange={update('email')}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label-text">Password</label>
+              <input
+                required
+                type="password"
+                className="input-field"
+                value={form.password}
+                onChange={update('password')}
+              />
+            </div>
+
+            <div>
+              <label className="label-text">Confirm Password</label>
+              <input
+                required
+                type="password"
+                className="input-field"
+                value={form.confirm_password}
+                onChange={update('confirm_password')}
+              />
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="btn-primary flex w-full items-center justify-center gap-2"
+          >
+            {loading ? (
+              'Creating account...'
+            ) : (
+              <>
+                Create Account
+                <UserPlus className="h-4 w-4" />
+              </>
+            )}
+          </button>
+        </form>
+
+        <p className="mt-6 text-center text-sm text-ink-soft">
           Already have an account?{' '}
-          <Link to="/login" className="font-medium text-brand-teal hover:underline">Log in</Link>
+          <Link
+            to="/login"
+            className="font-medium text-brand-teal hover:underline"
+          >
+            Log in
+          </Link>
         </p>
       </div>
     </div>

@@ -1,77 +1,73 @@
-"""
-apps/prescriptions/models.py
-Electronic prescription management — implements FR-06.
-"""
-from django.db import models
-from django.utils import timezone
-from datetime import timedelta
-
-
-class Prescription(models.Model):
+from django.db import models as db_models
+ 
+class ClinicalRecord(db_models.Model):
     """
-    Electronic prescription lifecycle:
-    issued → dispensed (or cancelled / expired)
-    Status CHECK constraint encodes FR-06.4–FR-06.6 lifecycle.
+    Stores structured clinical records per consultation.
+    Separate from PatientProfile (the evergreen demographic record);
+    ClinicalRecord captures the output of each specific consultation.
     """
-    class Status(models.TextChoices):
-        ISSUED    = 'issued',    'Issued'
-        DISPENSED = 'dispensed', 'Dispensed'
-        CANCELLED = 'cancelled', 'Cancelled'
-        EXPIRED   = 'expired',   'Expired'
-
-    appointment  = models.ForeignKey(
-        'appointments.Appointment', on_delete=models.PROTECT,
-        related_name='prescriptions', null=True, blank=True
-    )
-    patient      = models.ForeignKey(
-        'accounts.User', on_delete=models.PROTECT,
-        related_name='prescriptions',
+    patient      = db_models.ForeignKey(
+        'accounts.User', on_delete=db_models.PROTECT,
+        related_name='clinical_records',
         limit_choices_to={'role': 'patient'}
     )
-    doctor       = models.ForeignKey(
-        'accounts.DoctorProfile', on_delete=models.PROTECT,
-        related_name='prescriptions_issued'
+    doctor       = db_models.ForeignKey(
+        'accounts.DoctorProfile', on_delete=db_models.PROTECT,
+        related_name='clinical_records'
     )
-    pharmacist   = models.ForeignKey(
-        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='prescriptions_dispensed',
-        limit_choices_to={'role': 'pharmacist'}
+    appointment  = db_models.ForeignKey(
+        'appointments.Appointment', on_delete=db_models.SET_NULL,
+        null=True, blank=True, related_name='clinical_record'
     )
-    # Medication details (FR-06.1)
-    medication    = models.CharField(max_length=200)
-    dosage        = models.CharField(max_length=100)
-    frequency     = models.CharField(max_length=100)
-    duration_days = models.PositiveIntegerField()
-    instructions  = models.TextField(blank=True)
-
-    status        = models.CharField(
-        max_length=20, choices=Status.choices, default=Status.ISSUED
-    )
-    issued_at     = models.DateTimeField(auto_now_add=True)
-    dispensed_at  = models.DateTimeField(null=True, blank=True)
-    expires_at    = models.DateTimeField()
-    follow_up_sent = models.BooleanField(default=False)
-
+    # SOAP note structure (Subjective, Objective, Assessment, Plan)
+    chief_complaint       = db_models.TextField()
+    history_of_illness    = db_models.TextField(blank=True)
+    examination_findings  = db_models.TextField(blank=True)
+    diagnosis             = db_models.TextField()
+    treatment_plan        = db_models.TextField(blank=True)
+    follow_up_date        = db_models.DateField(null=True, blank=True)
+    is_confidential       = db_models.BooleanField(default=False)
+    created_at            = db_models.DateTimeField(auto_now_add=True)
+    updated_at            = db_models.DateTimeField(auto_now=True)
+ 
     class Meta:
-        db_table = 'prescriptions'
-        ordering = ['-issued_at']
-        indexes  = [
-            models.Index(fields=['patient', 'status']),
-            models.Index(fields=['pharmacist', 'status']),
-            models.Index(fields=['expires_at']),
-        ]
-
-    def save(self, *args, **kwargs):
-        # Auto-set expiry to 30 days from issue (FR-06.5)
-        if not self.expires_at:
-            self.expires_at = timezone.now() + timedelta(days=30)
-        is_new = self.pk is None
-        super().save(*args, **kwargs)
-        # Notify patient and pharmacist on new prescription (FR-06.2, FR-06.3)
-        if is_new:
-            from apps.notifications.tasks import send_prescription_notification
-            send_prescription_notification.delay(self.id)
-
+        db_table = 'clinical_records'
+        ordering = ['-created_at']
+ 
     def __str__(self):
-        return f"Rx #{self.id} — {self.medication} for {self.patient.full_name}"
-
+        return f"Record #{self.id} — {self.patient.full_name} by Dr. {self.doctor.user.full_name}"
+ 
+ 
+class MedicalDocument(db_models.Model):
+    """
+    Uploaded medical documents (lab results, X-rays, etc.).
+    Stored on AWS S3 (FR-03.6).
+    """
+    class DocumentType(db_models.TextChoices):
+        LAB_RESULT  = 'lab_result',  'Lab Result'
+        XRAY        = 'xray',        'X-Ray'
+        SCAN        = 'scan',        'Scan / Ultrasound'
+        REPORT      = 'report',      'Medical Report'
+        OTHER       = 'other',       'Other'
+ 
+    patient        = db_models.ForeignKey(
+        'accounts.User', on_delete=db_models.CASCADE, related_name='documents'
+    )
+    uploaded_by    = db_models.ForeignKey(
+        'accounts.User', on_delete=db_models.SET_NULL,
+        null=True, related_name='uploaded_documents'
+    )
+    clinical_record = db_models.ForeignKey(
+        ClinicalRecord, on_delete=db_models.SET_NULL,
+        null=True, blank=True, related_name='documents'
+    )
+    document_type  = db_models.CharField(max_length=20, choices=DocumentType.choices)
+    title          = db_models.CharField(max_length=200)
+    file           = db_models.FileField(upload_to='medical-documents/%Y/%m/')
+    description    = db_models.TextField(blank=True)
+    created_at     = db_models.DateTimeField(auto_now_add=True)
+ 
+    class Meta:
+        db_table = 'medical_documents'
+        ordering = ['-created_at']
+ 

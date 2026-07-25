@@ -1,11 +1,3 @@
-// ══════════════════════════════════════════════════════════════
-// frontend/src/services/api.ts
-//
-// Central axios instance. Implements:
-//  - Automatic JWT attachment on every request
-//  - Automatic token refresh on 401 (transparent to the caller)
-//  - Consistent error shape (matches Django's custom_exception_handler)
-// ══════════════════════════════════════════════════════════════
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios'
  
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'

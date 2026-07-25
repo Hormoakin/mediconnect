@@ -43,6 +43,10 @@ django-prometheus==2.3.1
 # ── Production Server ────────────────────────────────────────
 gunicorn==22.0.0
 
+# ── AI Services ──────────────────────────────────────────────
+openai==1.99.9
+pymongo==4.13.2
+
 # ── Utilities ────────────────────────────────────────────────
 python-decouple==3.8
 requests==2.32.3

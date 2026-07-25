@@ -1,10 +1,9 @@
-// ══════════════════════════════════════════════════════════════
-// frontend/src/pages/patient/FindDoctors.tsx
-// ══════════════════════════════════════════════════════════════
 import { useState, useCallback } from 'react'
 import { Search, Star, MapPin, ChevronDown } from 'lucide-react'
 import type { DoctorProfile } from '../../types/user'
 import BookAppointmentModal from '../../components/forms/BookAppointmentModal'
+import { api } from '../../services/api'
+import EmptyState from '../../components/common/EmptyState'
 
 const SPECIALITIES = [
   'General Practitioner','Cardiologist','Dermatologist','Neurologist',

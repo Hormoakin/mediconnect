@@ -41,13 +41,13 @@ THIRD_PARTY_APPS = [
 ]
 
 LOCAL_APPS = [
-    'apps.accounts',
-    'apps.appointments',
-    'apps.records',
-    'apps.prescriptions',
-    'apps.notifications',
-    'apps.admin_panel',
-    'apps.ai_service',
+    'apps.accounts.apps.AccountsConfig',
+    'apps.appointments.apps.AppointmentsConfig',
+    'apps.records.apps.RecordsConfig',
+    'apps.prescriptions.apps.PrescriptionsConfig',
+    'apps.notifications.apps.NotificationsConfig',
+    'apps.admin_panel.apps.AdminPanelConfig',
+    'apps.ai_service.apps.AIServiceConfig',
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS

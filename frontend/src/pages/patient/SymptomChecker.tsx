@@ -1,10 +1,8 @@
-// ══════════════════════════════════════════════════════════════
-// frontend/src/pages/patient/SymptomChecker.tsx
-// ══════════════════════════════════════════════════════════════
 import { useState } from 'react'
 import { Stethoscope as StethIcon, AlertTriangle, ArrowRight as ArrowRightIcon, Info } from 'lucide-react'
 import type { SymptomCheckResult } from '../../types/ai'
-
+import { api } from '../../services/api'
+ 
 const URGENCY_STYLES = {
   low:       'bg-emerald-50 text-emerald-700 border-emerald-200',
   medium:    'bg-brand-amber-tint text-amber-800 border-amber-200',

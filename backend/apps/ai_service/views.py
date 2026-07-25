@@ -87,19 +87,13 @@ def get_mongo_collection(collection_name: str):
     the user request.
     """
 
-    client = MongoClient(
-        settings.MONGODB_URI,
-        serverSelectionTimeoutMS=2000
-    )
-    try:
-        collection = client["mediconnect"]["ai_symptom_logs"]
-        collection.insert_one({...})
-    finally:
-        client.close()
-
-    db = client["mediconnect"]
-
-    return db[collection_name]
+    def get_mongo_collection(collection_name: str):
+        client = MongoClient(
+            settings.MONGODB_URI,
+            serverSelectionTimeoutMS=2000,
+        )
+        db = client["mediconnect"]
+        return db[collection_name]
 
 
 # ==========================================================
@@ -226,18 +220,10 @@ def symptom_check(request):
     try:
 
         client = OpenAI(
-            api_key=settings.OPENAI_API_KEY
-            timeout=30
+            api_key=settings.OPENAI_API_KEY,
+            timeout=30,
         )
-        required_keys = [
-            "possible_conditions",
-            "urgency_level",
-            "recommended_specialist",
-            "recommended_actions"
-        ]
-
-        for key in required_keys:
-            ai_result.setdefault(key, None)
+       
 
         system_prompt = (
             "You are an experienced medical triage assistant. "
@@ -279,16 +265,14 @@ Return ONLY valid JSON.
     "disclaimer":""
 }}
 """
-       logger.info(
-           "Calling OpenAI model %s",
-           settings.OPENAI_MODEL
-       )
+        logger.info(
+            "Calling OpenAI model %s",
+            settings.OPENAI_MODEL
+        )
+
         response = client.chat.completions.create(
-
             model=settings.OPENAI_MODEL,
-
             messages=[
-
                 {
                     "role": "system",
                     "content": system_prompt
@@ -296,23 +280,19 @@ Return ONLY valid JSON.
 
                 {
                     "role": "user",
-                    "content": user_prompt
-                }
+                    "content": user_prompt,
+                },
 
             ],
 
-            response_format={
-                "type": "json_object"
-            },
-
+            response_format={"type": "json_object"},
             temperature=0.2,
-
             max_tokens=800
 
         )
 
         response_time_ms = int(
-            (time.time() - start) * 1000
+            (time.time() - start_time) * 1000
         )
 
         raw_response = (
@@ -331,11 +311,19 @@ Return ONLY valid JSON.
 
             ai_result = json.loads(raw_response)
 
+            required_keys = [
+                "possible_conditions",
+                "urgency_level",
+                "recommended_specialist",
+                "recommended_actions",
+            ]
+
+            for key in required_keys:
+                ai_result.setdefault(key, None)
+
         except json.JSONDecodeError:
 
-            logger.exception(
-                "OpenAI returned invalid JSON."
-            )
+            logger.exception("OpenAI returned invalid JSON.")
 
             return Response(
 
@@ -348,9 +336,9 @@ Return ONLY valid JSON.
             )
 
         ai_result["disclaimer"] = (
-            "⚠️ This AI analysis is provided for informational purposes only. "
-            "It is NOT a medical diagnosis and should never replace consultation "
-            "with a licensed healthcare professional."
+             "⚠️ This AI analysis is provided for informational purposes only. "
+             "It is NOT a medical diagnosis and should never replace consultation "
+             "with a licensed healthcare professional."
         )
 
         # -------------------------------------------------
@@ -446,7 +434,6 @@ def recommend_doctor(request):
     )
 
     if not specialist_type:
-
         return Response(
 
             {

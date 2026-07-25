@@ -80,10 +80,10 @@ spec:
                   key: AWS_SECRET_ACCESS_KEY
           resources:
             requests:
-              memory: "256Mi"
+              memory: "384Mi"
               cpu: "250m"
             limits:
-              memory: "512Mi"
+              memory: "768Mi"
               cpu: "500m"
           livenessProbe:
             httpGet:

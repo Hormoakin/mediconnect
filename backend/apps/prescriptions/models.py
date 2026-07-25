@@ -1,7 +1,3 @@
-"""
-apps/prescriptions/models.py
-Electronic prescription management — implements FR-06.
-"""
 from django.db import models
 from django.utils import timezone
 from datetime import timedelta
