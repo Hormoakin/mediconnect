@@ -16,10 +16,11 @@ class User(AbstractUser):
     """
 
     class Role(models.TextChoices):
-        PATIENT    = 'patient',     _('Patient')
-        DOCTOR     = 'doctor',      _('Doctor')
-        PHARMACIST = 'pharmacist',  _('Pharmacist')
-        ADMIN      = 'admin',       _('Administrator')
+        PATIENT      = 'patient',      _('Patient')
+        DOCTOR       = 'doctor',       _('Doctor')
+        PHARMACIST   = 'pharmacist',   _('Pharmacist')
+        RECEPTIONIST = 'receptionist', _('Receptionist')
+        ADMIN        = 'admin',        _('Administrator')
 
     # Core identity fields
     email      = models.EmailField(_('email address'), unique=True)
@@ -61,6 +62,9 @@ class User(AbstractUser):
     def is_admin_role(self):
         return self.role == self.Role.ADMIN
 
+    @property
+    def is_receptionist(self):
+        return self.role == self.Role.RECEPTIONIST
 
 class DoctorProfile(models.Model):
     """
@@ -133,6 +137,28 @@ class PatientProfile(models.Model):
     def __str__(self):
         return f"Patient: {self.user.full_name}"
 
+class ReceptionistProfile(models.Model):
+    '''
+    Receptionist-specific profile.
+    Receptionists act as intermediaries for patients who cannot
+    access the platform digitally — booking appointments, creating
+    patient accounts, and managing front-desk workflows on behalf
+    of the healthcare facility.
+    '''
+    user          = models.OneToOneField(
+        User, on_delete=models.CASCADE, related_name='receptionist_profile'
+    )
+    department    = models.CharField(max_length=100, blank=True)
+    staff_id      = models.CharField(max_length=50, blank=True, unique=True)
+    is_available  = models.BooleanField(default=True)
+    created_at    = models.DateTimeField(auto_now_add=True)
+    updated_at    = models.DateTimeField(auto_now=True)
+ 
+    class Meta:
+        db_table = 'receptionist_profiles'
+ 
+    def __str__(self):
+        return f"Receptionist: {self.user.full_name} ({self.department})"
 
 class DoctorAvailability(models.Model):
     """
