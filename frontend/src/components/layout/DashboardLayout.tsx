@@ -12,6 +12,7 @@ import {
   Search, LogOut, Menu, X, Activity, Bell,
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
+import type { UserRole } from '../../types/user'
 import { useSocket } from '../../contexts/SocketContext'
 import clsx from 'clsx'
 
@@ -19,14 +20,34 @@ interface NavItem {
   to: string
   label: string
   icon: typeof LayoutDashboard
-  roles: Array<'patient' | 'doctor' | 'pharmacist' | 'admin'>
+  roles: UserRole[]
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { to: '/dashboard',       label: 'Dashboard',       icon: LayoutDashboard, roles: ['patient', 'doctor', 'pharmacist', 'admin'] },
-  { to: '/doctors',         label: 'Find a Doctor',   icon: Search,          roles: ['patient'] },
-  { to: '/symptom-checker', label: 'Symptom Checker', icon: Stethoscope,     roles: ['patient'] },
-  { to: '/records',         label: 'Medical Records', icon: FileText,        roles: ['patient', 'doctor'] },
+  {
+    to: '/dashboard',
+    label: 'Dashboard',
+    icon: LayoutDashboard,
+    roles: ['patient', 'doctor', 'pharmacist', 'receptionist', 'admin'],
+  },
+  {
+    to: '/doctors',
+    label: 'Find a Doctor',
+    icon: Search,
+    roles: ['patient', 'receptionist'],
+  },
+  {
+    to: '/symptom-checker',
+    label: 'Symptom Checker',
+    icon: Stethoscope,
+    roles: ['patient'],
+  },
+  {
+    to: '/records',
+    label: 'Medical Records',
+    icon: FileText,
+    roles: ['patient', 'doctor', 'receptionist'],
+  },
 ]
 
 export default function DashboardLayout() {

@@ -2,7 +2,7 @@
 // ══════════════════════════════════════════════════════════════
 // frontend/src/types/user.ts
 // ══════════════════════════════════════════════════════════════
-export type UserRole = 'patient' | 'doctor' | 'pharmacist' | 'admin'
+export type UserRole = 'patient' | 'doctor' | 'pharmacist' | 'receptionist' | 'admin'
  
 export interface User {
   id: number
