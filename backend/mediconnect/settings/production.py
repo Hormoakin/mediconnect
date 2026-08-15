@@ -47,3 +47,4 @@ EMAIL_USE_TLS       = True
 EMAIL_HOST_USER     = 'apikey'
 EMAIL_HOST_PASSWORD = os.environ.get('SENDGRID_API_KEY', '')
 
+AI_SERVICE_URL = env('AI_SERVICE_URL', default='http://ai-service:8001')

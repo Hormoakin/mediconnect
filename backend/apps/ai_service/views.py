@@ -658,3 +658,67 @@ def recommend_doctor(request):
         }
 
     )
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def ai_triage(request):
+    """
+    POST /api/v1/ai/triage/
+    Enhanced AI triage: symptoms → department → doctors → booking payload.
+    Falls back to symptom-check if triage endpoint not available.
+    """
+    symptoms = request.data.get('symptoms', '').strip()
+    if not symptoms or len(symptoms) < 5:
+        return Response({'message': 'Please describe your symptoms in more detail.'}, status=400)
+
+    auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+
+    import httpx
+    from django.conf import settings
+
+    try:
+        response = httpx.post(
+            f"{settings.AI_SERVICE_URL}/api/v1/ai/triage",
+            json={
+                'symptoms':       symptoms,
+                'patient_age':    request.data.get('patient_age'),
+                'patient_gender': request.data.get('patient_gender'),
+            },
+            headers={'token': auth_header.replace('Bearer ', '')} if auth_header else {},
+            timeout=15.0,
+        )
+        if response.status_code == 200:
+            return Response(response.json())
+        # Fall back to standard symptom check if triage not deployed yet
+        fallback = httpx.post(
+            f"{settings.AI_SERVICE_URL}/api/v1/ai/symptom-check",
+            json={'symptoms': symptoms, 'patient_age': request.data.get('patient_age'), 'patient_gender': request.data.get('patient_gender')},
+            timeout=15.0,
+        )
+        if fallback.status_code == 200:
+            data = fallback.json()
+            # Wrap standard response in triage format
+            analysis = data.get('analysis', {})
+            return Response({
+                'symptoms_submitted':    symptoms,
+                'possible_conditions':   analysis.get('possible_conditions', []),
+                'urgency_level':         analysis.get('urgency_level', 'medium'),
+                'urgency_reason':        analysis.get('urgency_reason', ''),
+                'disclaimer':            analysis.get('disclaimer', ''),
+                'recommended_department': analysis.get('recommended_specialist', 'General Outpatient'),
+                'department_priority':   4,
+                'is_emergency':          analysis.get('urgency_level') == 'emergency',
+                'emergency_instruction': None,
+                'available_doctors':     [],
+                'total_doctors_found':   0,
+                'booking_payload':       None,
+                'booking_instructions':  'Please book an appointment with the recommended specialist.',
+                'response_time_ms':      data.get('response_time_ms', 0),
+                'model_version':         data.get('model_version', 'gpt-4o-mini'),
+            })
+        return Response({'message': 'AI triage service temporarily unavailable. Please try again.'}, status=503)
+    except httpx.TimeoutException:
+        return Response({'message': 'AI triage request timed out. Please try again.'}, status=503)
+    except Exception as e:
+        return Response({'message': 'AI service error. Please try again.'}, status=503)
