@@ -24,6 +24,7 @@ urlpatterns = [
     path('api/v1/prescriptions/', include('apps.prescriptions.urls')),
     path('api/v1/messages/',      include('apps.notifications.message_urls')),
     path('api/v1/ai/',            include('apps.ai_service.urls')),
+    path('api/v1/receptionist/',  include('apps.receptionist.urls')),
     path('api/v1/admin/',         include('apps.admin_panel.urls')),
 
     # Prometheus metrics (scraped by Prometheus every 15s)

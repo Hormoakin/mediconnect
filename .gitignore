@@ -48,7 +48,7 @@ sealed-secret-*.yaml
 
 # Docker
 .dockerignore
-
+!backend/.dockerignore
 # IDE
 .idea/
 .vscode/
@@ -71,4 +71,9 @@ coverage.xml
 
 # Misc
 *.backup
-*.bak
+*.bak*
+
+# Secrets / local configuration
+replacements.txt
+.env
+.env.*
